@@ -1,0 +1,577 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+------
+title: "PM Grp assignment"
+author: "Jai Kushwaha"
+date: "05/01/2020"
+output: word_document
+--------
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Group Assignment - Predictive Modelling 
+Group - 4
+Telecom Customer Churn Prediction Assessment
+
+Customer Churn is a burning problem for Telecom companies. In this project, we simulate one such case of customer churn where we work on a data of postpaid customers with a contract. The data has information about customer usage behavior, contract details, and payment details. The data also indicates which were the customers who canceled their service. Based on this past data, we need to build a model which can predict whether a customer will cancel their service in the future or not.
+
+You are expected to do the following : 
+
+Detailed Exploratory Data Analysis report of the dataset along with the missing value treatment
+Multicollinearity check and summarization of problem statement for business stakeholders
+Logistic Regression Model: creation and interpretation of the results
+Comparing the model performances using confusion matrix, GINI coefficient and  Kolmogorov Smirnov(KS-chart) along with the remarks on the best model
+Actionable Insights for the business stakeholders
+
+```{r}
+library(readxl)
+library("DiscriMiner")
+library("MASS")
+library(ISLR)
+library("car")
+library(dummies)
+library(e1071)
+library(ggplot2)
+library(rJava)
+library(Deducer)
+library(lattice)
+library(caret)
+library(NbClust)
+library(randomForest)
+library(MLmetrics)
+library(rpart)
+library(rpart.plot)
+library("neuralnet")
+library(JGR)
+library(pscl)
+library(lmtest)
+library(pROC)
+library(caTools)
+library(dummies)
+library(dplyr)
+library(fpc)
+library(readxl)
+library(cluster)
+library(rattle)
+library(RColorBrewer)
+library("data.table")
+library("scales")
+library(ROCR)
+library(ineq)
+library(ggcorrplot)
+library(funModeling)
+library(tidyverse) 
+library(Hmisc)
+library(InformationValue)
+library(GMDH2)
+
+Cellphone <- read_excel("Cellphone.xlsx",sheet = "Data")
+head(Cellphone)
+```
+
+* 11 Column Variables are there
+
+Variables	
+Churn   -----------	1 if customer cancelled service, 0 if not
+AccountWeeks-------	number of weeks customer has had active account
+ContractRenewal----	1 if customer recently renewed contract, 0 if not
+DataPlan-----------	1 if customer has data plan, 0 if not
+DataUsage----------	gigabytes of monthly data usage
+CustServCalls------	number of calls into customer service
+DayMins------------	average daytime minutes per month
+DayCalls-----------	average number of daytime calls
+MonthlyCharge------	average monthly bill
+OverageFee---------	largest overage fee in last 12 months
+RoamMins-----------	average number of roaming minutes
+
+```{r}
+summary(Cellphone)
+```
+
+Observations:
+1. From AccountWeeks : 75% of Customers used the services for atlest 74 weeks or 1.5 years.
+2. From RoamMins : More than 75% of the people used RoamMins so we can say most the people are mostly travelling.
+3. From DataPlan : 27.66% of people have dataplan.
+4. 14.49% Customer Churned
+
+```{r}
+any(is.na(Cellphone))
+```
+
+Observation:
+1. No missing value in the dataset.
+
+```{r}
+x=round(cor(Cellphone[,1:11]), 1)
+ggcorrplot(x, hc.order = TRUE, type = "lower",outline.col = "white", method = "circle")
+```
+Observation:
+1. Customer having a data plan and high data usage have a high monthly bill.
+2. As we can see from the above graph there is high correlation between dataplan and data usage . There will be multicolinearity while buliding the model.
+
+
+```{r}
+plot1 = ggplot(Cellphone, aes(Cellphone$AccountWeeks, fill= Cellphone$Churn)) + geom_histogram(alpha=0.4, bins = 70) +facet_wrap(vars(Cellphone$Churn))
+plot2 = ggplot(Cellphone, aes(Cellphone$DataUsage, fill= Cellphone$Churn)) + geom_histogram(alpha=0.4, bins = 70) +facet_wrap(vars(Cellphone$Churn))
+plot3 = ggplot(Cellphone, aes(Cellphone$DayMins, fill= Cellphone$Churn)) + geom_histogram(alpha=0.4, bins = 70) +facet_wrap(vars(Cellphone$Churn))
+plot4 = ggplot(Cellphone, aes(Cellphone$DayCalls, fill= Cellphone$Churn)) + geom_histogram(alpha=0.4, bins = 70) +facet_wrap(vars(Cellphone$Churn))
+plot5 = ggplot(Cellphone, aes(Cellphone$MonthlyCharge, fill= Cellphone$Churn)) + geom_histogram(alpha=0.4, bins = 70) +facet_wrap(vars(Cellphone$Churn))
+plot6 = ggplot(Cellphone, aes(Cellphone$OverageFee, fill= Cellphone$Churn)) + geom_histogram(alpha=0.4, bins = 70) +facet_wrap(vars(Cellphone$Churn))
+plot7 = ggplot(Cellphone, aes(Cellphone$RoamMins, fill= Cellphone$Churn)) + geom_histogram(alpha=0.4, bins = 70) +facet_wrap(vars(Cellphone$Churn))
+plot1
+plot2
+plot3
+plot4
+plot5
+plot6
+plot7
+```
+
+
+```{r}
+# Converting Churn, COntractRenewal and DataPlan to factor
+Cellphone$Churn_fact = factor(Cellphone$Churn, labels= c("Retained", "Churned"))
+Cellphone$ContractRenewal_fact = factor(Cellphone$ContractRenewal, labels  =c("Not Renewed", "Renewed"))
+Cellphone$DataPlan_fact = factor(Cellphone$DataPlan, labels =c("No","Yes"))
+str(Cellphone)
+```
+
+```{r}
+summary(Cellphone)
+
+```
+
+```{r}
+plot1 = freq(Cellphone$Churn_fact)
+
+
+```
+Observation:
+1. For every churned customer there are 17 retained customer.(14.49/85.51)
+
+
+```{r}
+plot2 = freq(Cellphone$ContractRenewal_fact)
+
+
+```
+
+Observation:
+1. More than 90% customer renewed the service and still some of them churned as churned is 14% while not renewed is 9.69 %
+
+```{r}
+plot3 = freq(Cellphone$DataPlan_fact)
+
+```
+
+Observation :
+1. Only 27.66 % customer are having a data plan
+
+```{r}
+plot_num(Cellphone)
+```
+
+
+```{r}
+## Bifurcating the data into Categorical and Continuous
+Cellphone_num = Cellphone[,c(2,5:11)]
+Cellphone_fact = Cellphone[,c(12:14)]
+print("No. of Rows in Cellphone data with factors" ) 
+ncol(Cellphone_fact)
+print("No. of Columns in Cellphone data with numerical data")
+ncol(Cellphone_num)
+```
+
+
+
+
+```{r}
+## Check For Multicolinearity
+vif(lm(Cellphone[,c(1:11)]))
+
+```
+Observation
+1. Vif>10 for linear model are for the variables DataPlan, DataUsage,DayMins, MonthlyCharge and OverageFee
+
+```{r}
+#Data Engineering
+Cellphone$ac_tenure = ifelse(Cellphone$AccountWeeks/4 < 3,0,
+                                ifelse(Cellphone$AccountWeeks/4 < 6,1,
+                                       ifelse(Cellphone$AccountWeeks/4 <12,2,
+                                              ifelse(Cellphone$AccountWeeks/4<24,3,
+                                                     ifelse(Cellphone$AccountWeeks/4<48,4,5)))))
+summary(Cellphone$AccountWeeks)
+summary(Cellphone$ac_tenure)
+hist(Cellphone$ac_tenure)
+```
+
+
+```{r}
+
+logit = glm(Churn_fact~ 
+            # AccountWeeks
+            +ContractRenewal
+            +DataPlan
+            +DataUsage
+            +CustServCalls
+            +DayMins
+            +DayCalls
+            +MonthlyCharge
+            +OverageFee
+            +RoamMins 
+            +ac_tenure
+            ,data= Cellphone, family = binomial(link = "logit"))
+
+vif(logit)
+
+```
+Observation:
+1. LOgistic model having VIF > 10 for variables DataPlan, DataUsage,DayMins, MonthlyCharge and OverageFee
+
+```{r}
+summary(logit)
+```
+Observation:
+AIC not giving warning i.e model is able to fit.
+
+```{r}
+pR2(logit)
+```
+Obs 
+1. pesudo R^2 is .2066 
+
+
+
+
+```{r}
+# Dividing the Data into Test and Train
+set.seed(100)
+
+indices= sample(1:nrow(Cellphone), 0.7*nrow(Cellphone))
+
+train_data = Cellphone[indices,]
+test_data = Cellphone[-indices,]
+names(Cellphone)
+print (paste('No. of Rows in Training Data', nrow(train_data) ))
+
+print(paste('No. of Rows in Test Data', nrow(test_data)))
+
+
+```
+
+
+```{r}
+summary(train_data)
+summary(test_data)
+freq(train_data)
+freq(test_data)
+
+```
+
+```{r}
+# Building Model for Training data
+logit = glm(Churn_fact~ 
+             #AccountWeeks
+            +ContractRenewal
+            +DataPlan
+            +DataUsage
+            +CustServCalls
+            +DayMins
+            +DayCalls
+            +MonthlyCharge
+            +OverageFee
+            +RoamMins 
+            +ac_tenure
+            ,data= train_data, family = binomial(link = "logit"))
+summary(logit)
+```
+Observation:
+1. CustserveCalls, RoamMins and ContractRenewal are significant as there P value is low
+2. AIC is not giving a warning so model is able to fit.
+
+
+
+```{r}
+pR2(logit)
+
+```
+
+Observation 
+1. Mcfadden is 0.197 so most the values are close to 0 i.e. Most customers as retained. As it is obvious from the data out of total 2333 customers in training data retained customers are more than churned.
+
+```{r}
+# Check for Multicolinearity
+vif(logit)
+```
+
+Observation
+1. VIF > 10 for DataUsage, DayMins, MonthlyCharge, OverageFee and DataPlan as it there is multicolinearity among the variables.
+Taking only one variable for our modelling out of the 5 variables.
+
+```{r}
+# Removing variables with  VIF >10 i.e. variables having multicolinearity.
+logit = glm(Churn_fact~ 
+            # AccountWeeks
+            +ContractRenewal
+            #+DataPlan
+            #+DataUsage
+            +CustServCalls
+            +DayMins
+            +DayCalls
+            #+MonthlyCharge
+            #+OverageFee
+            +RoamMins 
+            +ac_tenure
+            ,data= train_data, family = binomial(link = "logit"))
+summary(logit)
+pR2(logit)
+lrtest(logit)
+
+```
+
+Observation 
+1. AIC increased for the model.
+2. MOstly because the no. of iteration for the model to give output decreased to 5
+3. Significant variables -> CustservCalls, RoamMins and ContractRenewal and DataPlan as p value less than .05.
+4. Mcfadden r2 value decreased as variables are decreased.
+5. lrtest confirming overall validity of the model as p value less than .05.
+
+```{r}
+vif(logit)
+```
+OBservation
+1. NO multicolinearity
+
+```{r}
+# Taking variables which are significant haveing p value less than .05
+logit = glm(Churn_fact~ 
+            # AccountWeeks
+            +ContractRenewal
+            #+DataPlan
+            #+DataUsage
+            +CustServCalls
+            #+DayMins
+            #+DayCalls
+            #+MonthlyCharge
+            #+OverageFee
+            +RoamMins 
+            #+ac_tenure
+            ,data= train_data, family = binomial(link = "logit"))
+pR2(logit)
+```
+Observation:
+1. McFadden r 2 is decreased to .10 from .16
+2. So, business significant variables should be included in the model.
+
+```{r}
+#Building model with only significant variables and after removing variable having multicolinearity
+logit = glm(Churn_fact~ 
+            # AccountWeeks
+            +ContractRenewal
+            #+DataPlan
+            #+DataUsage
+            +CustServCalls
+            +DayMins
+            #+DayCalls
+            #+MonthlyCharge
+            #+OverageFee
+            +RoamMins 
+            +ac_tenure
+            ,data= train_data, family = binomial(link = "logit"))
+summary(logit)
+pR2(logit)
+```
+Observation:
+1. Removed the variable DayCall Mcfadden r2 not changed.
+2. Model with only significant variable and multicolinearity removed.
+
+
+```{r}
+# Prediction
+prediction = predict(logit, type = "response")
+cutoff = floor(prediction+.5)
+table(Actual= train_data$Churn, Predicted = cutoff)
+confmat= table(Predicted= cutoff, Actual = train_data$Churn)
+#print((confmat[2,2])/(confmat[2,1]+confmat[2,2]))
+sensitivity(actuals=train_data$Churn, predictedScores = cutoff)
+confMat(confmat, positive = "1")
+43/(283+43)
+#confusionMatrix(confmat, positive = "1")
+```
+
+Observation:
+1. Misclassification is high.
+2. Accuracy is high enough as it is a biased data towards retained customers.
+3. Cutoff needs to be changed for arriving at optimum point.
+
+
+
+```{r}
+# Prediction training data increasing the cut off
+prediction = predict(logit, type = "response")
+cutoff = floor(prediction+.6)
+table(Actual= train_data$Churn, Predicted = cutoff)
+confmat= table(Predicted= cutoff, Actual = train_data$Churn)
+#confusionMatrix(confmat, positive = "1", mode= "everything")
+confMat(confmat, positive = "1")
+
+```
+Observation
+1. As we can see from above accuracy of the model is  85.5%. 
+2. Model wrongly predicted 254 churned customer as retained.
+3. Precision is low at 46.75 %.
+4. Cutoff needs to be changed i.e reduced.
+5. Misclassification is 336
+
+```{r}
+prediction = predict(logit, type = "response")
+cutoff = floor(prediction+.7)
+table(Actual= train_data$Churn, Predicted = cutoff)
+confmat= table(Predicted= cutoff, Actual = train_data$Churn)
+#confusionMatrix(confmat, positive = "1", mode= "everything")
+
+confMat(confmat, positive = "1")
+```
+
+Observation:
+1. Accuracy slightly decreased
+2. 330 customer not properly classified.
+
+```{r}
+# Performance of model at optimal cut off for sensitvity is maximum at 1.
+max_sens_cutoff <- optimalCutoff(actuals=train_data$Churn, predictedScores = prediction, optimiseFor='Ones')
+max_sens_cutoff   
+cutoff = ifelse(prediction>.01259202,1,0)
+table(Actual= train_data$Churn, Predicted = cutoff)
+confMat(confmat, positive = "1")
+```
+```{r}
+# Performance of model at optimal cut off for sensitvity is maximum at 1.
+max_sens_cutoff <- optimalCutoff(actuals=train_data$Churn, predictedScores = prediction, optimiseFor='Both')
+max_sens_cutoff   
+
+```
+
+```{r}
+# Predicting based on the optimal value for cutoff for both 1's and 0's
+cutoff = ifelse(prediction>0.142592,1,0)
+table(Actual= train_data$Churn, Predicted = cutoff)
+confMat(confmat, positive = "1")
+```
+Observation:
+1. Optimum value for cutoff is 0.142592.
+2. Accuracy is maintained at 84.14%
+
+
+
+```{r}
+probability_Scores=format(exp(coef(logit))/(exp(coef(logit))+1),scientific = FALSE)
+print(probability_Scores)
+
+```
+
+```{r}
+# ROC PLot
+rocplot(logit)
+```
+Observation:
+1. AUC is 79.68% which is good enough.
+
+
+```{r}
+# Predicting for test data
+Pred_test=predict(logit,type = "response",newdata = test_data)
+summary(Pred_test)
+```
+Obs:
+1. Avg churners are  15.39 % it is similar to main data Cellhone data having churners at  14.29 %
+
+```{r}
+# Confusion Matrix and prediction for test data at optimal cutoff.
+
+cutoff = ifelse(Pred_test>0.142592,1,0)
+table(Actual= test_data$Churn, Predicted = cutoff)
+confmat= table(Predicted= cutoff, Actual = test_data$Churn)
+confMat(confmat, positive = "1")
+
+```
+
+Obs:
+1. MOdel accuracy on test model is 74.6%
+2. TPR and FPR are more than 70%
+i.e Sensitivity          :   0.758
+    Specificity          :   0.7438
+
+    
+    
+
+```{r}
+# Model Performance
+# On Test Data
+
+prediction= predict(logit,type = "response",newdata = test_data)
+test_data$prediction = prediction
+test_pred_obj = prediction(test_data$prediction,test_data$Churn )
+
+perf = performance(test_pred_obj, "tpr", "fpr")
+plot(perf)
+
+```
+
+Observation:
+1. TPR is more than FPR .
+```{r}
+auc(roc(test_data$Churn,prediction))
+```
+Observation:
+1. AUC-ROC for actuals vs predictions is 81.49 % for test data.
+
+
+
+```{r}
+# Kolmogorov Smirnov(KS-chart)
+ks_stat(actuals=test_data$Churn, predictedScores = prediction)
+ks_plot(actuals=test_data$Churn, predictedScores = prediction)
+```
+
+Observation:
+1. for the 50% data our model can 87.26 % of data.
+
+
+```{r}
+gini = ineq(test_data$prediction, type="Gini")
+print(paste('The Loss for the model through GINI is :',gini))
+```
+
+```{r}
+# Model Performance
+# On Train Data
+Pred_train=predict(logit,type = "response",newdata = train_data)
+train_data$prediction = Pred_train
+train_pred_obj = prediction( train_data$prediction, train_data$Churn)
+perf = performance(test_pred_obj, "tpr", "fpr")
+plot(perf)
+```
+```{r}
+print(paste('AUC-ROC for train data is :',auc(roc(train_data$Churn,train_data$prediction))))
+```
+```{r}
+# Kolmogorov Smirnov(KS-chart) for Training data
+ks_stat(actuals=train_data$Churn, predictedScores = train_data$prediction)
+ks_plot(actuals=train_data$Churn, predictedScores = train_data$prediction)
+```
+Obs:
+1. Model is positvely able to predict 85.89% correctly for 50 % of data.
+
+```{r}
+gini = ineq(train_data$prediction, type="Gini")
+print(paste('The Loss for the model through GINI is :',gini))
+```
+
+
